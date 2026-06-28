@@ -1,0 +1,121 @@
+name: Optimized Parallel Feed Update
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tidb-import
+  cancel-in-progress: false
+
+jobs:
+  smoke-test:
+    name: Smoke tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run smoke tests
+        run: python smoke_test.py
+
+  run-sync:
+    name: Sync FID ${{ matrix.fid }}
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    needs: smoke-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    env:
+      TIDB_HOST: ${{ secrets.TIDB_HOST }}
+      TIDB_USER: ${{ secrets.TIDB_USER }}
+      TIDB_PASSWORD: ${{ secrets.TIDB_PASSWORD }}
+      TIDB_DB_NAME: ${{ secrets.TIDB_DB_NAME }}
+      ADMITAD_USER_ID: ${{ secrets.ADMITAD_USER_ID }}
+      ADMITAD_USER_TOKEN: ${{ secrets.ADMITAD_USER_TOKEN }}
+      ADMITAD_FID_CODE: ${{ secrets.ADMITAD_FID_CODE }}
+
+    strategy:
+      max-parallel: 2
+      fail-fast: false
+      matrix:
+        fid:
+          - "14280"
+          - "14281"
+          - "14282"
+          - "14283"
+          - "14284"
+          - "14285"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Import Feed FID ${{ matrix.fid }}
+        env:
+          FID_ID: ${{ matrix.fid }}
+          MONTHLY_WRITE_LIMIT: 50000000
+          STRICT_STALE_DELETE: 1
+          MAX_FEED_ROWS: 1500000
+          MAX_TOTAL_ROWS_PER_DAY: 5000000
+          MAX_CRITICAL_ROWS_PER_DAY: 500000
+          DAILY_ROW_RESERVE_CHUNK: 5000
+          BATCH_SIZE: 5000
+          DELETE_BATCH_SIZE: 10000
+          FEED_SCAN_BATCH_SIZE: 20000
+          MIN_FEED_ROWS_ABSOLUTE: 1000
+          MIN_FEED_SIZE_RATIO: '0.5'
+          LOCK_TTL_SECONDS: 3600
+        run: |
+          set -o pipefail
+          python v6_direct_db.py 2>&1 | tee "tidb_import_${FID_ID}.log"
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-fid-${{ matrix.fid }}
+          path: tidb_import_${{ matrix.fid }}.log
+          retention-days: 14
+
+      - name: Notify on failure
+        if: failure()
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_COLOR: danger
+          SLACK_TITLE: "❌ Feed Import Failed - FID ${{ matrix.fid }}"
+          SLACK_MESSAGE: "FID ${{ matrix.fid }} failed.\nRun: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
