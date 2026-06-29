@@ -1,3 +1,9 @@
+[![Python](https://img.shields.io/badge/Python-3.9+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
+[![TiDB](https://img.shields.io/badge/TiDB-Serverless-FF6633?style=for-the-badge&logo=mysql&logoColor=white)](https://tidbcloud.com)
+[![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-2088FF?style=for-the-badge&logo=github-actions&logoColor=white)](https://github.com/n81l95k7j8/admitad-to-tidb/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+
 # admitad-to-tidb
 
 Idempotent synchronizer for [Admitad](https://www.admitad.com/) product feeds into [TiDB Serverless](https://www.pingcap.com/tidb-serverless/) (MySQL-compatible).
